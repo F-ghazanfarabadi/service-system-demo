@@ -46,7 +46,8 @@ def get_role():
     return role if role in ("user", "staff", "admin") else "user"
 def page_user():
     st.title("🏫 سامانه هوشمند مدیریت شکایات دانشکده")
-    st.caption("ثبت شکایت توسط کاربر")
+    st.caption("ثبت شکایت توسط کاربر  ")
+    st.caption("location : A11")
     ahp_result = compute_ahp_weights()
     weights = ahp_result["weights"]
 
