@@ -42,10 +42,8 @@ def load_workers():
     return df
 
 def get_role():
-    params = parse_qs(os.environ.get("QUERY_STRING", ""))
-    role = params.get("role", ["user"])[0].lower()
+    role = st.query_params.get("role", "user").lower()
     return role if role in ("user", "staff", "admin") else "user"
-
 def page_user():
     st.title("🏫 سامانه هوشمند مدیریت شکایات دانشکده")
     st.caption("ثبت شکایت توسط کاربر")
