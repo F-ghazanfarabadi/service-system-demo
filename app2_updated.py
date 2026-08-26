@@ -58,7 +58,7 @@ def page_user():
         )
         col1, col2 = st.columns(2)
         with col1:
-            location = st.text_input("📍 مکان شکایت *", placeholder="مثلاً اتاق A11")
+            location = "A11"
         with col2:
             category = st.selectbox("🔧 دسته‌بندی خدمات *", CATEGORY_OPTIONS)
 
@@ -81,9 +81,7 @@ def page_user():
         if not description.strip():
             st.error("ثبت شکایت بدون توضیحات امکان‌پذیر نیست.")
             return
-        if not location.strip():
-            st.error("لطفاً مکان شکایت را وارد کنید.")
-            return
+       
 
         df = load_complaints()
         next_num = 1
