@@ -306,11 +306,11 @@ def page_user():
 
             location = "A11"
 
-            st.text_input(
-                "📍 مکان",
-                value="A11",
-                disabled=True
-            )
+            # st.text_input(
+            #     "📍 مکان",
+            #     value="A11",
+            #     disabled=True
+            # )
 
         with col2:
 
@@ -477,6 +477,9 @@ def page_user():
         # =================================================
 
         save_complaints(df)
+
+        st.success(f"✅ شکایت {complaint_id} با موفقیت ثبت شد.")
+        st.info(f"سطح اولویت شکایت شما: {emoji} {level} — امتیاز: {score:.2f}")
 
         # =================================================
         # تخصیص خودکار
