@@ -265,7 +265,8 @@ def page_user():
     st.title(
         "🏫 سامانه هوشمند مدیریت شکایات دانشکده"
     )
-
+    if "success_message" not in st.session_state:
+        st.session_state.success_message = None
     st.caption(
         "ثبت شکایت توسط کاربر"
     )
@@ -478,8 +479,9 @@ def page_user():
 
         save_complaints(df)
 
-        st.success(f"✅ شکایت {complaint_id} با موفقیت ثبت شد.")
-        st.info(f"سطح اولویت شکایت شما: {emoji} {level} — امتیاز: {score:.2f}")
+        st.session_state.success_message = (
+    f"✅ شکایت {complaint_id} با موفقیت ثبت شد."
+)
 
         # =================================================
         # تخصیص خودکار
@@ -630,7 +632,8 @@ def page_user():
             "امتیاز اولویت",
             f"{score:.2f}"
         )
-
+    if st.session_state.success_message:
+        st.success(st.session_state.success_message)
         # -------------------------------------------------
         # رفرش برای نمایش وضعیت جدید
         # -------------------------------------------------
