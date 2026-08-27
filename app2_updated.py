@@ -167,12 +167,82 @@ def page_user():
             "assigned_worker_name": ""
         }
         df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-        save_complaints(df)
+save_complaints(df)
 
-        st.success(f"شکایت {complaint_id} با موفقیت ثبت شد.")
-        st.metric("سطح اولویت", f"{emoji} {level}")
-        st.metric("امتیاز اولویت", f"{score:.2f}")
+# =========================
+# تخصیص خودکار شکایت
+# =========================
+workers = load_workers()
 
+available_workers = workers[
+    workers["available"].str.strip() == "آزاد"
+].to_dict("records")
+
+complaint_records = [row]
+
+result = assign_complaints(
+    complaint_records,
+    available_workers
+)
+
+if result["status"] == "assigned":
+
+    assigned_worker_id = result["assignments"].get(complaint_id)
+
+    if assigned_worker_id:
+        worker_match = workers[
+            workers["worker_id"].str.strip().str.upper()
+            == assigned_worker_id.strip().upper()
+        ]
+
+        if not worker_match.empty:
+            worker_name = worker_match.iloc[0]["name"]
+
+            # ذخیره اطلاعات تخصیص در شکایت
+            df.loc[
+                df["id"] == complaint_id,
+                "assigned_worker_id"
+            ] = assigned_worker_id
+
+            df.loc[
+                df["id"] == complaint_id,
+                "assigned_worker_name"
+            ] = worker_name
+
+            df.loc[
+                df["id"] == complaint_id,
+                "status"
+            ] = "تخصیص‌یافته"
+
+            # کارمند را مشغول کن
+            worker_index = worker_match.index[0]
+
+            workers.at[
+                worker_index,
+                "available"
+            ] = "مشغول"
+
+            # ذخیره نهایی
+            save_complaints(df)
+            save_workers(workers)
+
+            st.success(
+                f"شکایت {complaint_id} با موفقیت به "
+                f"{worker_name} تخصیص یافت."
+            )
+        else:
+            st.warning(
+                f"شکایت ثبت شد، اما کارمند {assigned_worker_id} پیدا نشد."
+            )
+
+else:
+    st.warning(
+        "شکایت ثبت شد، اما در حال حاضر کارمند آزاد و "
+        "هم‌تخصصی برای تخصیص پیدا نشد."
+    )
+
+st.metric("سطح اولویت", f"{emoji} {level}")
+st.metric("امتیاز اولویت", f"{score:.2f}")
 def page_staff():
     st.title("👷 صفحه کارکنان")
     workers = load_workers()
