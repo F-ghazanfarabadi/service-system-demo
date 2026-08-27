@@ -20,14 +20,19 @@ WORKERS_FILE = os.path.join(BASE_DIR, "workers.csv")
 st.set_page_config(page_title="سامانه هوشمند مدیریت شکایات", layout="wide")
 
 def load_complaints():
+    empty_df = pd.DataFrame(columns=[
+        "id","timestamp","description","location","category","safety_score",
+        "disruption_score","infrastructure_score","waiting_multiplier",
+        "priority_score","priority_level","status","assigned_worker_id",
+        "assigned_worker_name"
+    ])
     if not os.path.exists(COMPLAINTS_FILE):
-        return pd.DataFrame(columns=[
-            "id","timestamp","description","location","category","safety_score",
-            "disruption_score","infrastructure_score","waiting_multiplier",
-            "priority_score","priority_level","status","assigned_worker_id",
-            "assigned_worker_name"
-        ])
-    df = pd.read_csv(COMPLAINTS_FILE, encoding="utf-8-sig", dtype=str).fillna("")
+        return empty_df
+    try:
+        df = pd.read_csv(COMPLAINTS_FILE, encoding="utf-8-sig", dtype=str).fillna("")
+    except pd.errors.EmptyDataError:
+        # فایل وجود دارد ولی کاملاً خالی است (حتی بدون سطر هدر)
+        return empty_df
     for c in df.columns:
         if df[c].dtype == object:
             df[c] = df[c].str.strip()
@@ -40,7 +45,13 @@ def save_complaints(df):
     df.to_csv(COMPLAINTS_FILE, index=False, encoding="utf-8-sig")
 
 def load_workers():
-    df = pd.read_csv(WORKERS_FILE, encoding="utf-8-sig", dtype=str).fillna("")
+    empty_df = pd.DataFrame(columns=["worker_id","name","skill","distance","available"])
+    if not os.path.exists(WORKERS_FILE):
+        return empty_df
+    try:
+        df = pd.read_csv(WORKERS_FILE, encoding="utf-8-sig", dtype=str).fillna("")
+    except pd.errors.EmptyDataError:
+        return empty_df
     for c in df.columns:
         if df[c].dtype == object:
             df[c] = df[c].str.strip()
