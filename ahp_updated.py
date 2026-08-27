@@ -5,10 +5,15 @@
 - Class_Disruption (اختلال در کلاس)  
 - Infrastructure_Criticality (بحرانی‌بودن خدمت)
 
-وزن‌ها بر اساس نسبت‌های داده‌شده:
-  Safety : Class_Disruption = 3:1
-  Safety : Infrastructure_Criticality = 4:1
-  Class_Disruption : Infrastructure_Criticality = 2:1
+وزن‌ها بر اساس نسبت‌های اصلاح‌شده (برای رفع اثر رقیق‌شدن امتیاز در حالتی
+که کلاس کاملاً مختل شده ولی ایمنی/زیرساخت درگیر نیست، و با حفظ سازگاری
+ماتریس طبق آستانه‌ی Saaty یعنی CR < 0.1):
+  Safety : Class_Disruption = 2:1               (اصلاح‌شده از 3:1)
+  Safety : Infrastructure_Criticality = 4:1      (طبق نظر استاد، ثابت)
+  Class_Disruption : Infrastructure_Criticality = 4:1   (اصلاح‌شده از 2:1)
+
+نتیجه: CR ≈ 0.046 (سازگار)، وزن Class_Disruption از 0.239 به 0.346
+افزایش می‌یابد بدون آنکه Safety جایگاه مهم‌ترین معیار را از دست بدهد.
 """
 
 import numpy as np
@@ -19,14 +24,14 @@ RI_TABLE = {1: 0.00, 2: 0.00, 3: 0.58, 4: 0.90, 5: 1.12, 6: 1.24, 7: 1.32, 8: 1.
 # معیارهای جدید
 CRITERIA_NAMES = ["Safety", "Class_Disruption", "Infrastructure_Criticality"]
 
-# ماتریس مقایسه زوجی بر اساس نسبت‌های استاد:
-# S : CD = 3:1  →  S/CD = 3
-# S : IC = 4:1  →  S/IC = 4
-# CD : IC = 2:1 →  CD/IC = 2
+# ماتریس مقایسه زوجی بر اساس نسبت‌های اصلاح‌شده:
+# S : CD = 2:1  →  S/CD = 2   (اصلاح‌شده از 3)
+# S : IC = 4:1  →  S/IC = 4   (ثابت طبق نظر استاد)
+# CD : IC = 4:1 →  CD/IC = 4  (اصلاح‌شده از 2)
 PAIRWISE_MATRIX = [
-    [1,     3,     4    ],   # Safety vs [S, CD, IC]
-    [1/3,   1,     2    ],   # Class_Disruption vs [S, CD, IC]
-    [1/4,   1/2,   1    ],   # Infrastructure_Criticality vs [S, CD, IC]
+    [1,     2,     4    ],   # Safety vs [S, CD, IC]
+    [1/2,   1,     4    ],   # Class_Disruption vs [S, CD, IC]
+    [1/4,   1/4,   1    ],   # Infrastructure_Criticality vs [S, CD, IC]
 ]
 
 
@@ -77,7 +82,7 @@ if __name__ == "__main__":
         print(f"  {name}: {w:.4f}")
     print(f"\nنسبت‌های تائید:")
     w = result["weights"]
-    print(f"  Safety : Class_Disruption = {w['Safety']/w['Class_Disruption']:.2f}:1 (انتظار: 3:1)")
+    print(f"  Safety : Class_Disruption = {w['Safety']/w['Class_Disruption']:.2f}:1 (انتظار: 2:1)")
     print(f"  Safety : Infrastructure = {w['Safety']/w['Infrastructure_Criticality']:.2f}:1 (انتظار: 4:1)")
-    print(f"  Class_Disruption : Infrastructure = {w['Class_Disruption']/w['Infrastructure_Criticality']:.2f}:1 (انتظار: 2:1)")
+    print(f"  Class_Disruption : Infrastructure = {w['Class_Disruption']/w['Infrastructure_Criticality']:.2f}:1 (انتظار: 4:1)")
     print(f"\nCR: {result['CR']:.4f} (سازگار: {result['is_consistent']})")
