@@ -1,105 +1,199 @@
 # -*- coding: utf-8 -*-
-"""
-ماژول تخصیص: مدل برنامه‌ریزی خطی (Linear Programming) با PuLP برای تخصیص
-شکایات به کارکنان بر اساس تخصص، در دسترس‌بودن و کمینه‌سازی فاصله.
-
-مدل ریاضی
-----------
-متغیر تصمیم:
-    x_ij = 1  اگر شکایت i به کارمند j تخصیص یابد، در غیر این صورت 0
-
-تابع هدف:
-    Minimize  Z = sum_i sum_j  d_ij * x_ij
-
-محدودیت‌ها:
-    1) هر شکایتی که حداقل یک کارمند واجد شرایط (هم‌تخصص و آزاد) دارد،
-       دقیقاً به یک کارمند تخصیص یابد:      sum_j x_ij = 1
-    2) هر کارمند حداکثر به یک شکایت تخصیص یابد:   sum_i x_ij <= 1
-    3) تخصص: فقط زوج‌های (i, j) که تخصص کارمند j با دسته‌بندی شکایت i
-       یکسان است، به‌عنوان متغیر ساخته می‌شوند (سایر زوج‌ها اصلاً وارد مدل نمی‌شوند)
-    4) در دسترس‌بودن: فقط کارکنانی با وضعیت "آزاد" وارد مجموعه متغیرها می‌شوند
-
-توجه: مدل به‌صورت عمومی برای چند شکایت هم‌زمان نوشته شده تا در نسخه‌های
-بعدی (فراتر از Demo تک‌شکایتی) بدون تغییر ساختاری قابل استفاده باشد.
-"""
 
 import pulp
 
 
+def normalize_text(value):
+    """
+    نرمال‌سازی متن فارسی برای جلوگیری از خطاهای تطبیق
+    ناشی از فاصله، نیم‌فاصله و حروف عربی/فارسی.
+    """
+    if value is None:
+        return ""
+
+    text = str(value).strip()
+
+    # حروف عربی → فارسی
+    text = text.replace("ي", "ی")
+    text = text.replace("ى", "ی")
+    text = text.replace("ك", "ک")
+
+    # نیم‌فاصله و فاصله‌های اضافی
+    text = text.replace("\u200c", "")
+    text = text.replace("\u200d", "")
+    text = " ".join(text.split())
+
+    return text
+
+
 def assign_complaints(complaints, workers):
     """
-    Parameters
-    ----------
-    complaints : list[dict]
-        هر دیکشنری شامل حداقل {"id": ..., "category": ...}
-    workers : list[dict]
-        هر دیکشنری شامل {"worker_id", "skill", "distance", "available"}
-        available باید مقدار "آزاد" یا "مشغول" باشد.
+    تخصیص شکایت‌ها به کارکنان با استفاده از برنامه‌ریزی خطی.
 
-    Returns
-    -------
-    dict
-        {"status": "assigned" | "no_eligible_worker",
-         "assignments": {complaint_id: worker_id, ...}}
+    معیارهای تخصیص:
+    1. تطابق تخصص کارمند با دسته‌بندی شکایت
+    2. آزاد بودن کارمند
+    3. کمینه‌سازی فاصله
     """
-    # ساخت زوج‌های مجاز: فقط هم‌تخصص و آزاد
+
     eligible_pairs = []
+
     for c in complaints:
+
+        complaint_category = normalize_text(c.get("category", ""))
+
         for w in workers:
-            if w["skill"] == c["category"] and w["available"] == "آزاد":
-                eligible_pairs.append((c["id"], w["worker_id"]))
 
+            worker_skill = normalize_text(w.get("skill", ""))
+            worker_status = normalize_text(w.get("available", ""))
+
+            if (
+                worker_skill == complaint_category
+                and worker_status == "آزاد"
+            ):
+                eligible_pairs.append(
+                    (c["id"], w["worker_id"])
+                )
+
+    # اگر هیچ زوج واجد شرایطی وجود نداشت
     if not eligible_pairs:
-        return {"status": "no_eligible_worker", "assignments": {}}
+        return {
+            "status": "no_eligible_worker",
+            "assignments": {}
+        }
 
-    prob = pulp.LpProblem("Complaint_Assignment", pulp.LpMinimize)
-
-    x = {
-        (cid, wid): pulp.LpVariable(f"x_{cid}_{wid}", cat="Binary")
-        for (cid, wid) in eligible_pairs
-    }
-
-    distance_by_worker = {w["worker_id"]: w["distance"] for w in workers}
-
-    # تابع هدف: کمینه‌سازی مجموع فاصله کارکنان تخصیص‌یافته تا محل شکایت
-    prob += pulp.lpSum(
-        distance_by_worker[wid] * x[(cid, wid)] for (cid, wid) in eligible_pairs
+    # ایجاد مدل
+    prob = pulp.LpProblem(
+        "Complaint_Assignment",
+        pulp.LpMinimize
     )
 
-    # محدودیت ۱: هر شکایتِ دارای گزینه واجد شرایط، دقیقاً به یک کارمند تخصیص یابد
-    complaint_ids_with_option = {cid for (cid, wid) in eligible_pairs}
-    for cid in complaint_ids_with_option:
-        keys = [k for k in x if k[0] == cid]
-        prob += pulp.lpSum(x[k] for k in keys) == 1
+    # متغیرهای تصمیم
+    x = {
+        (cid, wid): pulp.LpVariable(
+            f"x_{cid}_{wid}",
+            cat="Binary"
+        )
+        for cid, wid in eligible_pairs
+    }
 
-    # محدودیت ۲: هر کارمند حداکثر یک شکایت در آن واحد بپذیرد
-    worker_ids = {wid for (cid, wid) in eligible_pairs}
+    # فاصله هر کارمند
+    distance_by_worker = {}
+
+    for w in workers:
+        try:
+            distance_by_worker[w["worker_id"]] = float(w["distance"])
+        except (ValueError, TypeError):
+            distance_by_worker[w["worker_id"]] = 0.0
+
+    # تابع هدف: کمینه‌سازی مجموع فاصله
+    prob += pulp.lpSum(
+        distance_by_worker[wid] * x[(cid, wid)]
+        for cid, wid in eligible_pairs
+    )
+
+    # هر شکایت واجد شرایط دقیقاً یک کارمند بگیرد
+    complaint_ids = {
+        cid for cid, wid in eligible_pairs
+    }
+
+    for cid in complaint_ids:
+
+        variables = [
+            x[(ccid, wid)]
+            for ccid, wid in eligible_pairs
+            if ccid == cid
+        ]
+
+        prob += pulp.lpSum(variables) == 1
+
+    # هر کارمند حداکثر یک شکایت بگیرد
+    worker_ids = {
+        wid for cid, wid in eligible_pairs
+    }
+
     for wid in worker_ids:
-        keys = [k for k in x if k[1] == wid]
-        prob += pulp.lpSum(x[k] for k in keys) <= 1
 
-    prob.solve(pulp.PULP_CBC_CMD(msg=0))
+        variables = [
+            x[(cid, wwid)]
+            for cid, wwid in eligible_pairs
+            if wwid == wid
+        ]
 
+        prob += pulp.lpSum(variables) <= 1
+
+    # حل مدل
+    prob.solve(
+        pulp.PULP_CBC_CMD(msg=0)
+    )
+
+    # استخراج جواب
     assignments = {}
+
     if pulp.LpStatus[prob.status] == "Optimal":
-        for (cid, wid), var in x.items():
-            if var.value() == 1:
+
+        for (cid, wid), variable in x.items():
+
+            if variable.value() == 1:
                 assignments[cid] = wid
 
-    status = "assigned" if assignments else "no_eligible_worker"
-    return {"status": status, "assignments": assignments}
+    if assignments:
+        return {
+            "status": "assigned",
+            "assignments": assignments
+        }
+
+    return {
+        "status": "no_eligible_worker",
+        "assignments": {}
+    }
 
 
 if __name__ == "__main__":
-    # تست مستقل مطابق سناریوی مشخصات (بخش ۲۲ و ۳۴)
-    demo_complaints = [{"id": "C001", "category": "تأسیسات"}]
-    demo_workers = [
-        {"worker_id": "W1", "skill": "برق", "distance": 5, "available": "آزاد"},
-        {"worker_id": "W2", "skill": "تأسیسات", "distance": 2, "available": "آزاد"},
-        {"worker_id": "W3", "skill": "نظافت", "distance": 8, "available": "آزاد"},
-        {"worker_id": "W4", "skill": "عمومی", "distance": 4, "available": "آزاد"},
-        {"worker_id": "W5", "skill": "تأسیسات", "distance": 3, "available": "آزاد"},
+
+    demo_complaints = [
+        {
+            "id": "C001",
+            "category": "تأسیسات"
+        }
     ]
-    result = assign_complaints(demo_complaints, demo_workers)
+
+    demo_workers = [
+        {
+            "worker_id": "W1",
+            "skill": "برق",
+            "distance": 5,
+            "available": "آزاد"
+        },
+        {
+            "worker_id": "W2",
+            "skill": "تأسیسات",
+            "distance": 2,
+            "available": "آزاد"
+        },
+        {
+            "worker_id": "W3",
+            "skill": "نظافت",
+            "distance": 8,
+            "available": "آزاد"
+        },
+        {
+            "worker_id": "W4",
+            "skill": "عمومی",
+            "distance": 4,
+            "available": "آزاد"
+        },
+        {
+            "worker_id": "W5",
+            "skill": "تأسیسات",
+            "distance": 3,
+            "available": "آزاد"
+        },
+    ]
+
+    result = assign_complaints(
+        demo_complaints,
+        demo_workers
+    )
+
     print(result)
-    # انتظار می‌رود: C001 -> W2 (چون بین W2 و W5 هم‌تخصص، W2 فاصله کمتری دارد: 2 < 3)
