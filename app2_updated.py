@@ -41,6 +41,37 @@ def load_workers():
     df["distance"] = pd.to_numeric(df["distance"], errors="coerce").fillna(0)
     return df
 
+def save_workers(df):
+    df.to_csv(WORKERS_FILE, index=False, encoding="utf-8-sig")
+
+def refresh_dynamic_scores(df, weights):
+    """
+    امتیاز اولویت را هر بار بر اساس زمان فعلی (نه فقط لحظه ثبت) دوباره
+    محاسبه می‌کند تا ضریب افزایش تأخیر (waiting_multiplier) واقعاً اثر بگذارد.
+    نتیجه در همان دیتافریم به‌روزرسانی و در فایل ذخیره می‌شود.
+    """
+    if df.empty:
+        return df
+    now = datetime.now()
+    changed = False
+    for i, row in df.iterrows():
+        waiting = compute_waiting_time_multiplier(row["timestamp"], now)
+        score = compute_priority_score(
+            row["safety_score"], row["disruption_score"], row["infrastructure_score"],
+            weights, waiting
+        )
+        level, _ = priority_level(score)
+        if (df.at[i, "waiting_multiplier"] != waiting or
+                df.at[i, "priority_score"] != score or
+                df.at[i, "priority_level"] != level):
+            df.at[i, "waiting_multiplier"] = waiting
+            df.at[i, "priority_score"] = score
+            df.at[i, "priority_level"] = level
+            changed = True
+    if changed:
+        save_complaints(df)
+    return df
+
 def get_role():
     role = st.query_params.get("role", "user").lower()
     return role if role in ("user", "staff", "admin") else "user"
@@ -142,7 +173,9 @@ def page_staff():
     worker = staff.iloc[0]
     st.subheader(f"مأموریت‌های {worker['name']}")
 
+    ahp_result = compute_ahp_weights()
     df = load_complaints()
+    df = refresh_dynamic_scores(df, ahp_result["weights"])
     tasks = df[df["assigned_worker_id"].str.upper() == worker["worker_id"].upper()].copy()
 
     if tasks.empty:
@@ -167,6 +200,7 @@ def page_admin():
     ahp_result = compute_ahp_weights()
     weights = ahp_result["weights"]
     complaints = load_complaints()
+    complaints = refresh_dynamic_scores(complaints, weights)
     workers = load_workers()
 
     tabs = st.tabs(["📋 شکایات", "⚙️ تخصیص کار", "📐 AHP", "🧮 مدل ریاضی", "👷 کارکنان"])
@@ -185,11 +219,14 @@ def page_admin():
 
     with tabs[1]:
         st.subheader("تخصیص خودکار شکایت‌ها به کارکنان")
-        if complaints.empty:
+        # فقط شکایاتی که هنوز به کارمندی تخصیص نیافته‌اند وارد مدل شوند
+        unassigned = complaints[complaints["assigned_worker_id"] == ""]
+        if unassigned.empty:
             st.info("شکایتی برای تخصیص وجود ندارد.")
         else:
-            worker_records = workers.to_dict("records")
-            complaint_records = complaints.to_dict("records")
+            # فقط کارکنانی که هم‌اکنون «آزاد» هستند وارد مدل شوند
+            worker_records = workers[workers["available"] == "آزاد"].to_dict("records")
+            complaint_records = unassigned.to_dict("records")
             result = assign_complaints(complaint_records, worker_records)
 
             if result["status"] == "assigned":
@@ -204,8 +241,13 @@ def page_admin():
                         complaints.at[i, "assigned_worker_name"] = wrow.iloc[0]["name"]
                         complaints.at[i, "status"] = "تخصیص‌یافته"
                         changed = True
+                    # کارمند تخصیص‌یافته را «مشغول» علامت بزن تا دوباره انتخاب نشود
+                    widx = workers.index[workers["worker_id"] == wid]
+                    if len(widx):
+                        workers.at[widx[0], "available"] = "مشغول"
                 if changed:
                     save_complaints(complaints)
+                    save_workers(workers)
 
                 assigned = complaints[complaints["assigned_worker_id"] != ""][[
                     "id","description","location","category",
