@@ -634,6 +634,10 @@ def page_user():
         )
     if st.session_state.success_message:
         st.success(st.session_state.success_message)
+
+        # جلوگیری از نمایش تکراری و رفرش بی‌نهایت
+        st.session_state.success_message = None
+
         # -------------------------------------------------
         # رفرش برای نمایش وضعیت جدید
         # -------------------------------------------------
